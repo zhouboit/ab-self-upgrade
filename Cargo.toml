@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "crates/ab-self-upgrade",
+    "crates/ab-self-upgrade-example",
+]
+resolver = "3"

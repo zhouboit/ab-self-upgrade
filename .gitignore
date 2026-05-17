@@ -1,0 +1,81 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# Rust environment
+.rustup/
+.cargo/
+.claude/
+.cargo/.crates.toml
+
+# Build artifacts
+*.o
+*.so
+*.dylib
+*.dll
+*.exe
+*.rlib
+*.a
+
+# Debug
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# OS
+.DS_Store
+Thumbs.db
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+*.env
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+*.db
+
+# Test results
+test_results/
+coverage/
+*.profraw
+*.profdata
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+*.old
+*~
+
+# Documentation builds
+docs/book/
+book/
+
+# Editor backup files
+*~
+.#*
+\#*#
