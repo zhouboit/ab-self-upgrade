@@ -1,8 +1,11 @@
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
 
 use ab_self_upgrade::UpgradeConfig;
 use ab_self_upgrade::UpgradeEngine;
 use ab_self_upgrade::Version;
+use tokio::sync::{watch, Mutex};
 
 const CONFIG: &str = r#"
 api_domain = https://cloud.example.com
@@ -29,26 +32,34 @@ async fn main() {
     println!("  Metadata URL: {}", config.metadata_url());
     println!();
 
-    let mut engine = UpgradeEngine::new(config).expect("failed to create engine");
+    let engine = Arc::new(Mutex::new(
+        UpgradeEngine::new(config).expect("failed to create engine"),
+    ));
 
-    println!("Initial state: {:?}", engine.state().phase);
+    println!("Initial state: {:?}", engine.lock().await.state().phase);
 
-    match engine.check_and_upgrade().await {
-        Ok(outcome) => println!("Upgrade outcome: {:?}", outcome),
-        Err(ab_self_upgrade::Error::AlreadyUpToDate { current, latest }) => {
-            println!("Already up to date: {} (latest: {})", current, latest);
-        }
-        Err(e) => {
-            println!("Upgrade check result (expected in example): {}", e);
-        }
+    // Start the upgrade loop in the background.
+    // It runs periodically and stops when the program exits (or shutdown signal).
+    let (shutdown_tx, shutdown_rx) = watch::channel(false);
+    let _loop_handle = UpgradeEngine::spawn_run_loop(engine.clone(), shutdown_rx);
+
+    println!("Upgrade loop running in background...");
+    println!("Main program is free to do other work.");
+    println!();
+
+    // Simulate the main program doing work.
+    // The upgrade loop checks for updates in the background automatically.
+    for i in 1..=3 {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let phase = engine.lock().await.state().phase;
+        println!("[main] working... (tick {}) — upgrade phase: {:?}", i, phase);
     }
 
-    println!("Final state: {:?}", engine.state().phase);
+    println!();
+    println!("Main program shutting down, sending stop signal to upgrade loop...");
 
-    // To run the periodic loop instead:
-    // let (tx, rx) = watch::channel(false);
-    // tokio::spawn(async move {
-    //     let _ = engine.run_loop(rx).await;
-    // });
-    // // On shutdown: tx.send(true).unwrap();
+    // Graceful shutdown (optional — the loop also stops when the tokio runtime drops)
+    shutdown_tx.send(true).unwrap();
+
+    println!("Done.");
 }

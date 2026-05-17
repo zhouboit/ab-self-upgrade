@@ -1,5 +1,6 @@
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use reqwest::Client;
 use tokio::time::sleep;
@@ -222,6 +223,64 @@ impl UpgradeEngine {
             report_upgrade(&self.client, url, &report).await?;
         }
         Ok(())
+    }
+
+    pub fn spawn_check_and_upgrade(
+        engine: Arc<tokio::sync::Mutex<Self>>,
+    ) -> tokio::task::JoinHandle<Result<UpgradeOutcome>> {
+        tokio::spawn(async move {
+            let mut engine = engine.lock().await;
+            engine.check_and_upgrade().await
+        })
+    }
+
+    pub fn spawn_confirm_healthy(
+        engine: Arc<tokio::sync::Mutex<Self>>,
+    ) -> tokio::task::JoinHandle<Result<()>> {
+        tokio::spawn(async move {
+            let mut engine = engine.lock().await;
+            engine.confirm_healthy().await
+        })
+    }
+
+    pub fn spawn_run_loop(
+        engine: Arc<tokio::sync::Mutex<Self>>,
+        mut shutdown: tokio::sync::watch::Receiver<bool>,
+    ) -> tokio::task::JoinHandle<Result<()>> {
+        tokio::spawn(async move {
+            let frequency = {
+                let e = engine.lock().await;
+                e.config.auto_upgrade_check_frequency
+            };
+            loop {
+                tokio::select! {
+                    _ = shutdown.changed() => {
+                        if *shutdown.borrow() {
+                            tracing::info!("upgrade loop: shutdown signal received");
+                            break;
+                        }
+                    }
+                    _ = sleep(frequency) => {
+                        let mut engine = engine.lock().await;
+                        match engine.check_and_upgrade().await {
+                            Ok(UpgradeOutcome::UpgradeComplete { target_version }) => {
+                                tracing::info!(%target_version, "upgraded successfully");
+                            }
+                            Err(Error::AlreadyUpToDate { .. }) => {
+                                tracing::debug!("already up to date");
+                            }
+                            Err(e) => {
+                                tracing::error!(error = %e, "upgrade check failed");
+                                engine.set_phase(Phase::Idle);
+                                engine.save_state()?;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            Ok(())
+        })
     }
 
     fn target_platform(&self) -> &'static str {
